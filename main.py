@@ -6,6 +6,7 @@ import pygame
 pygame.init()
 pygame.key.set_repeat(200, 70)
 
+# переменные-константы
 FPS = 50
 WIDTH = 800
 HEIGHT = 800
