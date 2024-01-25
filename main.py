@@ -13,12 +13,17 @@ HEIGHT = 800
 STEP = 5
 
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pause_screen = pygame.Surface((WIDTH, HEIGHT))
+pause_screen.fill(pygame.Color(0, 0, 0))
+pause_screen.set_alpha(80)
 clock = pygame.time.Clock()
 
 player = None
 all_sprites = pygame.sprite.Group()
 tiles_group = pygame.sprite.Group()
 player_group = pygame.sprite.Group()
+oil_busts_group = pygame.sprite.Group()
+pillar_group = pygame.sprite.Group()
 
 
 def load_image(name, color_key=-1):
@@ -70,8 +75,8 @@ def start_screen():
                   "Девочка, помешанная на гирлядах, решила захватить мир!!",
                   "ВСЕ БУДЕТ МЕРЦАТЬ. Ну, в теории...",
                   "А для начала, помоги ей украсить свой участок"]
-    fon = pygame.transform.scale(load_image('fon.jpg'), (WIDTH, HEIGHT))
-    screen.blit(fon, (0, 0))
+    starts_image = pygame.transform.scale(load_image('lawn.png'), (WIDTH, HEIGHT))
+    screen.blit(starts_image, (0, 0))
     font = pygame.font.Font(None, 30)
     text_coord = 50
     for line in intro_text:
@@ -107,6 +112,10 @@ phase_back = [player_image_back_left, player_image_back_right]
 phase_front = [player_image_front_st, player_image_front_go]
 phase = 0
 phase1 = 0
+
+background_image = load_image('lawn.png')
+pillar_image = load_image('pillar.png')
+
 tile_width = tile_height = 50
 
 
@@ -122,7 +131,9 @@ class Player(pygame.sprite.Sprite):
     def __init__(self, pos_x, pos_y):
         super().__init__(player_group, all_sprites)
         self.image = player_image_front_st
-        self.rect = self.image.get_rect().move(tile_width * pos_x + 15, tile_height * pos_y + 5)
+        self.rect = self.image.get_rect()
+        self.rect.x = 300
+        self.rect.y = 300
 
     def update(self, *args):
         self.rect = self.rect.move(random.randrange(3) - 1,
@@ -132,53 +143,63 @@ class Player(pygame.sprite.Sprite):
             self.image = self.image_boom
 
 
-player, level_x, level_y = generate_level(load_level("levelex.txt"))
-
 running = True
-
+pause = False
+start_screen()
+player = Player(400, 400)
 while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
-        elif event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_LEFT:
-                player.rect.x -= STEP
-                player.image = phase_left[phase]
-                phase1 += 1
-                if phase1 > 3:
-                    phase1 = 0
-                    phase += 1
-                    if phase > 1:
-                        phase = 0
-            if event.key == pygame.K_RIGHT:
-                player.rect.x += STEP
-                player.image = phase_right[phase]
-                phase1 += 1
-                if phase1 > 3:
-                    phase1 = 0
-                    phase += 1
-                    if phase > 1:
-                        phase = 0
-            if event.key == pygame.K_UP:
-                player.rect.y -= STEP
-                player.image = phase_back[phase]
-                phase += 1
-                if phase > 1:
-                    phase = 0
-            if event.key == pygame.K_DOWN:
-                player.rect.y += STEP
-                player.image = phase_front[phase]
-                phase1 += 1
-                if phase1 > 3:
-                    phase1 = 0
-                    phase += 1
-                    if phase > 1:
-                        phase = 0
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_p:
+                pause = not pause
+        if not pause:
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_a:
+                    player.rect.x -= STEP
+                    player.image = phase_left[phase]
+                    phase1 += 1
+                    if phase1 > 3:
+                        phase1 = 0
+                        phase += 1
+                        if phase > 1:
+                            phase = 0
+                if event.key == pygame.K_d:
+                    player.rect.x += STEP
+                    player.image = phase_right[phase]
+                    phase1 += 1
+                    if phase1 > 3:
+                        phase1 = 0
+                        phase += 1
+                        if phase > 1:
+                            phase = 0
+                if event.key == pygame.K_w:
+                    player.rect.y -= STEP
+                    player.image = phase_back[phase]
+                    phase1 += 1
+                    if phase1 > 3:
+                        phase1 = 0
+                        phase += 1
+                        if phase > 1:
+                            phase = 0
+                if event.key == pygame.K_s:
+                    player.rect.y += STEP
+                    player.image = phase_front[phase]
+                    phase1 += 1
+                    if phase1 > 3:
+                        phase1 = 0
+                        phase += 1
+                        if phase > 1:
+                            phase = 0
 
 
     screen.fill(pygame.Color(0, 0, 0))
+    screen.blit(background_image, (0, 0))
     tiles_group.draw(screen)
     player_group.draw(screen)
+    if pause:
+        screen.blit(pause_screen, (0, 0))
     pygame.display.flip()
     clock.tick(FPS)
 
