@@ -119,7 +119,7 @@ pillar_image = load_image('pillar.png')
 tile_width = tile_height = 50
 
 
-class Tile(pygame.sprite.Sprite):
+class Level(pygame.sprite.Sprite):
     def __init__(self, tile_type, pos_x, pos_y):
         super().__init__(tiles_group, all_sprites)
         self.image = tile_images[tile_type]
@@ -127,26 +127,35 @@ class Tile(pygame.sprite.Sprite):
 
 
 class Player(pygame.sprite.Sprite):
-
-    def __init__(self, pos_x, pos_y):
+    def __init__(self, pos_x, pos_y, additionals, length, time):
         super().__init__(player_group, all_sprites)
         self.image = player_image_front_st
         self.rect = self.image.get_rect()
-        self.rect.x = 300
-        self.rect.y = 300
+        self.rect.x = pos_x
+        self.rect.y = pos_y
+        self.speed = STEP
+        self.phase = 0
+        self.phase1 = 0
+        self.direction = pygame.math.Vector2(0, 0)
+        self.lights = False
+        self.additional_pillars = additionals
+        self.lights_length = length
+        self.time_limit = time * FPS
+        self.autopilot = False
 
-    def update(self, *args):
-        self.rect = self.rect.move(random.randrange(3) - 1,
-                                   random.randrange(3) - 1)
-        if args and args[0].type == pygame.MOUSEBUTTONDOWN and \
-                self.rect.collidepoint(args[0].pos):
+    def input(self):
+        pass
+
+    def update(self, direction):
+        self.rect = self.rect.move(random.randrange(3) - 1, random.randrange(3) - 1)
+        if direction:
             self.image = self.image_boom
 
 
 running = True
 pause = False
 start_screen()
-player = Player(400, 400)
+player = Player(300, 300, 3, 1000, 60)
 while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
