@@ -97,7 +97,8 @@ def start_screen():
         clock.tick(FPS)
 
 
-tile_images = {'wall': load_image('box.png'), 'empty': load_image('grass.png')}
+pillar_image = load_image("pillar.png")
+pillar_image_fixed = load_image("additional_pillar.png")
 player_image_front_st = load_image('девочка вперед стоя.png')
 player_image_front_go = load_image('девочка вперед идет.png')
 player_image_back_right = load_image('девочка назад справа.png')
@@ -106,24 +107,35 @@ player_image_left_st = load_image('девочка налево стоя.png')
 player_image_left_go = load_image('девочка налево идет.png')
 player_image_right_st = load_image('девочка направо стоя.png')
 player_image_right_go = load_image('девочка направо идет.png')
-phase_left = [player_image_left_st, player_image_left_go]
-phase_right = [player_image_right_st, player_image_right_go]
-phase_back = [player_image_back_left, player_image_back_right]
-phase_front = [player_image_front_st, player_image_front_go]
-phase = 0
-phase1 = 0
+animation = {"L": [player_image_left_st, player_image_left_go],
+             "R": [player_image_right_st, player_image_right_go],
+             "U": [player_image_back_left, player_image_back_right],
+             "D": [player_image_front_st, player_image_front_go]}
+ANIM_LAG = 6
+ANIM_PHASES = 2
+dx = {"L": -1, "U": 0, "D": 0, "R": 1}
+dy = {"L": 0, "U": -1, "D": 1, "R": 0}
 
-background_image = load_image('lawn.png')
-pillar_image = load_image('pillar.png')
+
+background_image = pygame.transform.scale(load_image('lawn.png'), (WIDTH, HEIGHT))
 
 tile_width = tile_height = 50
 
 
-class Level(pygame.sprite.Sprite):
-    def __init__(self, tile_type, pos_x, pos_y):
-        super().__init__(tiles_group, all_sprites)
-        self.image = tile_images[tile_type]
-        self.rect = self.image.get_rect().move(tile_width * pos_x, tile_height * pos_y)
+class Level():
+    def __init__(self):
+        pass
+
+
+class Pillar(pygame.sprite.Sprite):
+    def __init__(self, pos_x, pos_y, fixed):
+        super().__init__(pillar_group, all_sprites)
+        self.fixed = fixed
+        self.image = pillar_image_fixed if fixed else pillar_image
+        self.rect = self.image.get_rect()
+        self.rect.x = pos_x
+        self.rect.y = pos_y
+
 
 
 class Player(pygame.sprite.Sprite):
@@ -136,26 +148,91 @@ class Player(pygame.sprite.Sprite):
         self.speed = STEP
         self.phase = 0
         self.phase1 = 0
-        self.direction = pygame.math.Vector2(0, 0)
+        self.direction = "D"
         self.lights = False
         self.additional_pillars = additionals
         self.lights_length = length
         self.time_limit = time * FPS
         self.autopilot = False
+        self.singlestep = False
+        self.destination = pygame.math.Vector2(pos_x, pos_y)
 
-    def input(self):
-        pass
+    def input(self, event):
+        keys = pygame.key.get_pressed()
+        if keys:
+            if keys[pygame.K_a]:
+                self.direction = "L"
+                self.singlestep = True
+                self.autopilot = False
+            if keys[pygame.K_s]:
+                self.direction = "D"
+                self.singlestep = True
+                self.autopilot = False
+            if keys[pygame.K_d]:
+                self.direction = "R"
+                self.singlestep = True
+                self.autopilot = False
+            if keys[pygame.K_w]:
+                self.direction = "U"
+                self.singlestep = True
+                self.autopilot = False
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            self.autopilot = True
+            self.destination = event.pos
 
-    def update(self, direction):
-        self.rect = self.rect.move(random.randrange(3) - 1, random.randrange(3) - 1)
-        if direction:
-            self.image = self.image_boom
+    def update(self):
+        if self.singlestep:
+            self.singlestep = False
+            self.rect.x += dx[self.direction] * self.speed
+            self.rect.y += dy[self.direction] * self.speed
+            player.image = animation[self.direction][self.phase]
+            self.phase1 += 1
+            if self.phase1 >= ANIM_LAG:
+                self.phase1 = 0
+                self.phase += 1
+                if self.phase >= ANIM_PHASES:
+                    self.phase = 0
+        elif self.autopilot:
+            dest_v = pygame.math.Vector2(self.destination)
+            player_v = pygame.math.Vector2(self.rect.center)
+            if (dest_v - player_v).magnitude() > self.speed:
+                delta_dir = (dest_v - player_v).normalize()
+                delta = delta_dir * self.speed
+                self.rect.x += delta[0]
+                self.rect.y += delta[1]
+                if delta_dir*pygame.math.Vector2(1,1) > 0:
+                    if delta_dir * pygame.math.Vector2(1, -1) > 0:
+                        self.direction = "R"
+                    else:
+                        self.direction = "D"
+                else:
+                    if delta_dir * pygame.math.Vector2(1, -1) > 0:
+                        self.direction = "U"
+                    else:
+                        self.direction = "L"
+            else:
+                self.autopilot = False
+                self.rect.x = self.destination[0] - 100
+                self.rect.y = self.destination[1] - 100
+
+            player.image = animation[self.direction][self.phase]
+            self.phase1 += 1
+            if self.phase1 >= ANIM_LAG:
+                self.phase1 = 0
+                self.phase += 1
+                if self.phase >= ANIM_PHASES:
+                    self.phase = 0
+
+
 
 
 running = True
 pause = False
 start_screen()
 player = Player(300, 300, 3, 1000, 60)
+pillar0 = Pillar(600, 600, True)
+pillar1 = Pillar(100, 100, False)
+
 while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
@@ -164,48 +241,14 @@ while running:
             if event.key == pygame.K_p:
                 pause = not pause
         if not pause:
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_a:
-                    player.rect.x -= STEP
-                    player.image = phase_left[phase]
-                    phase1 += 1
-                    if phase1 > 3:
-                        phase1 = 0
-                        phase += 1
-                        if phase > 1:
-                            phase = 0
-                if event.key == pygame.K_d:
-                    player.rect.x += STEP
-                    player.image = phase_right[phase]
-                    phase1 += 1
-                    if phase1 > 3:
-                        phase1 = 0
-                        phase += 1
-                        if phase > 1:
-                            phase = 0
-                if event.key == pygame.K_w:
-                    player.rect.y -= STEP
-                    player.image = phase_back[phase]
-                    phase1 += 1
-                    if phase1 > 3:
-                        phase1 = 0
-                        phase += 1
-                        if phase > 1:
-                            phase = 0
-                if event.key == pygame.K_s:
-                    player.rect.y += STEP
-                    player.image = phase_front[phase]
-                    phase1 += 1
-                    if phase1 > 3:
-                        phase1 = 0
-                        phase += 1
-                        if phase > 1:
-                            phase = 0
+            player.input(event)
+    player.update()
+
 
 
     screen.fill(pygame.Color(0, 0, 0))
     screen.blit(background_image, (0, 0))
-    tiles_group.draw(screen)
+    pillar_group.draw(screen)
     player_group.draw(screen)
     if pause:
         screen.blit(pause_screen, (0, 0))
