@@ -12,7 +12,7 @@ FPS = 50
 WIDTH = 800
 HEIGHT = 800
 STEP = 5
-PILLAR_OP_COOLDOWN = 100
+PILLAR_OP_COOLDOWN = 200
 ANIM_LAG = 6
 ANIM_PHASES = 2
 GLOW_LOW = 150
@@ -87,7 +87,7 @@ def start_screen():
     font = pygame.font.Font(None, 30)
     text_coord = 50
     for line in intro_text:
-        string_rendered = font.render(line, 1, pygame.Color('black'))
+        string_rendered = font.render(line, 1, pygame.Color('yellow'))
         intro_rect = string_rendered.get_rect()
         text_coord += 10
         intro_rect.top = text_coord
@@ -133,7 +133,12 @@ class Level():
     def __init__(self):
         pass
 
-
+def draw_statusbar(remaining_time, remaining_length):
+    f = pygame.font.Font(None, 30)
+    t_text = f.render(f"Осталось секунд: {remaining_time:.2f}", True, (255, 255, 255))
+    l_text = f.render(f"Осталось гирлянды: {str(int(remaining_length))}", True, (255, 255, 255))
+    screen.blit(t_text, (10, 10))
+    screen.blit(l_text, (400, 10))
 
 class Pillar(pygame.sprite.Sprite):
     def __init__(self, pos_x, pos_y, fixed):
@@ -147,16 +152,19 @@ class Pillar(pygame.sprite.Sprite):
         self.pickable = False
         self.attached = False
         self.nearby = False
+        self.connected = [self]
+        self.lightsattached = []
 
     def update(self, player):
         if not self.fixed:
-            if self.hitbox.colliderect(player.hitbox):
-                self.pickable = True
+            if self.hitbox.colliderect(player.hitbox) :
                 self.nearby = True
-                self.image = pillar_image_pickable
-                t = pygame.time.get_ticks()
-                al = (math.sin(t / (GLOW_LAG * math.pi)) + 1) / 2
-                self.image.set_alpha(GLOW_LOW + (GLOW_HIGH - GLOW_LOW) * al)
+                if len(self.connected) == 1:
+                    self.pickable = True
+                    self.image = pillar_image_pickable
+                    t = pygame.time.get_ticks()
+                    al = (math.sin(t / (GLOW_LAG * math.pi)) + 1) / 2
+                    self.image.set_alpha(GLOW_LOW + (GLOW_HIGH - GLOW_LOW) * al)
             else:
                 self.image = pillar_image
                 self.pickable = False
@@ -166,6 +174,9 @@ class Pillar(pygame.sprite.Sprite):
                 self.nearby = True
             else:
                 self.nearby = False
+    def distance_to(self, other):
+        return (pygame.math.Vector2(self.rect.x, self.rect.y) -
+                pygame.math.Vector2(other.rect.x, other.rect.y)).magnitude()
 
 
 class Lights:
@@ -175,8 +186,10 @@ class Lights:
         self.end_x = end_x
         self.end_y = end_y
         self.lit = lit
+        self.beg = None
+        self.end = None
 
-    def get_lenght(self):
+    def get_length(self):
         return (pygame.math.Vector2(self.beg_x, self.beg_y) - pygame.math.Vector2(self.end_x, self.end_y)).magnitude()
 
     def draw(self):
@@ -198,7 +211,7 @@ class Player(pygame.sprite.Sprite):
         self.lights = False
         self.additional_pillars = additionals
         self.lights_length = length
-        self.time_limit = time * FPS
+        self.time_limit = time
         self.autopilot = False
         self.singlestep = False
         self.destination = pygame.math.Vector2(pos_x, pos_y)
@@ -244,21 +257,58 @@ class Player(pygame.sprite.Sprite):
                             if p.nearby:
                                 self.carry_lights = Lights(p.rect.center[0], p.rect.center[1],
                                                              self.rect.center[0], self.rect.center[1])
+                                self.carry_lights.beg = p
                                 lights.append(self.carry_lights)
-                                p.lights = self.carry_lights
+                                p.lightsattached.append(self.carry_lights)
                                 self.pillar_op_time = pygame.time.get_ticks()
                                 break
                     else:
                         for p in pillars:
-                            if p.nearby:
-                                print("try to attach")
-                                self.carry_lights.end_x = p.rect.center[0]
-                                self.carry_lights.end_y = p.rect.center[1]
-                                p.lights = self.carry_lights
-                                self.lights_length -= self.carry_lights.get_lenght()
-                                self.carry_lights = None
+                            if p.nearby and p.distance_to(self.carry_lights.beg) < self.lights_length:
+                                #print("try to attach")
+                                if self.carry_lights.beg not in p.connected:
+                                    self.carry_lights.end_x = p.rect.center[0]
+                                    self.carry_lights.end_y = p.rect.center[1]
+                                    p.connected.append(self.carry_lights.beg)
+                                    self.carry_lights.beg.connected.append(p)
+                                    p.lightsattached.append(self.carry_lights )
+                                    self.carry_lights.end = p
+                                    self.lights_length -= self.carry_lights.get_length()
+                                    print(self.lights_length)
+                                    self.carry_lights = None
+                                    self.pillar_op_time = pygame.time.get_ticks()
+                                    print("attached!", len(p.connected))
+                                    break
+
+            if keys[pygame.K_z]:
+                if (pygame.time.get_ticks() - self.pillar_op_time) > PILLAR_OP_COOLDOWN:
+                    if not self.carry_lights:
+                        for p in pillars:
+                            if p.nearby and len(p.lightsattached) > 0:
+
+                                self.carry_lights = p.lightsattached[-1]
+                                self.lights_length += self.carry_lights.get_length()
+                                p.lightsattached.pop()
+                                p.connected[-1].connected.remove(p)
+                                p.connected.pop()
+                                if self.carry_lights.beg == p:
+                                    self.carry_lights.beg = self.carry_lights.end
+                                    self.carry_lights.beg_x = self.carry_lights.end_x
+                                    self.carry_lights.beg_y = self.carry_lights.end_y
+
+                                self.carry_lights.end = None
+                                self.carry_lights.end_x = self.rect.center[0]
+                                self.carry_lights.end_y = self.rect.center[1]
                                 self.pillar_op_time = pygame.time.get_ticks()
                                 break
+                    else:
+                        p = self.carry_lights.beg
+                        if p.nearby:
+                            lights.remove(self.carry_lights)
+                            p.lightsattached.remove(self.carry_lights)
+                            self.carry_lights = None
+                            self.pillar_op_time = pygame.time.get_ticks()
+
 
         if event.type == pygame.MOUSEBUTTONDOWN:
             self.autopilot = True
@@ -269,6 +319,12 @@ class Player(pygame.sprite.Sprite):
             self.singlestep = False
             self.rect.x += dx[self.direction] * self.speed
             self.rect.y += dy[self.direction] * self.speed
+            if self.carry_lights:
+                self.carry_lights.end_x = self.rect.center[0]
+                self.carry_lights.end_y = self.rect.center[1]
+            if self.carry_lights and self.lights_length < self.carry_lights.get_length():
+                self.rect.x -= dx[self.direction] * self.speed
+                self.rect.y -= dy[self.direction] * self.speed
             player.image = animation[self.direction][self.phase]
             self.phase1 += 1
             if self.phase1 >= ANIM_LAG:
@@ -284,6 +340,13 @@ class Player(pygame.sprite.Sprite):
                 delta = delta_dir * self.speed
                 self.rect.x += delta[0]
                 self.rect.y += delta[1]
+                if self.carry_lights:
+                    self.carry_lights.end_x = self.rect.center[0]
+                    self.carry_lights.end_y = self.rect.center[1]
+                if self.carry_lights and self.lights_length < self.carry_lights.get_length():
+                    self.rect.x -= delta[0]
+                    self.rect.y -= delta[1]
+                    self.autopilot = False
                 if delta_dir*pygame.math.Vector2(1,1) > 0:
                     if delta_dir * pygame.math.Vector2(1, -1) > 0:
                         self.direction = "R"
@@ -315,10 +378,11 @@ class Player(pygame.sprite.Sprite):
 running = True
 pause = False
 start_screen()
-player = Player(300, 300, 3, 1000, 60)
+player = Player(300, 300, 3, 2000, 60)
 pillar0 = Pillar(600, 600, True)
 pillar1 = Pillar(100, 100, True)
 lights_group = []
+time_elapsed = 0
 
 while running:
     for event in pygame.event.get():
@@ -332,6 +396,8 @@ while running:
     player.update()
     for p in pillar_group:
         p.update(player)
+    if not pause:
+        player.time_limit -= time_elapsed
 
     screen.fill(pygame.Color(0, 0, 0))
     screen.blit(background_image, (0, 0))
@@ -341,7 +407,11 @@ while running:
     player_group.draw(screen)
     if pause:
         screen.blit(pause_screen, (0, 0))
+    if player.carry_lights:
+        draw_statusbar(player.time_limit, player.lights_length - player.carry_lights.get_length())
+    else:
+        draw_statusbar(player.time_limit, player.lights_length)
     pygame.display.flip()
-    clock.tick(FPS)
+    time_elapsed = clock.tick(FPS) / 1000
 
 terminate()
