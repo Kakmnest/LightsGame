@@ -25,12 +25,22 @@ pause_screen.fill(pygame.Color(0, 0, 0))
 pause_screen.set_alpha(80)
 clock = pygame.time.Clock()
 
-player = None
-all_sprites = pygame.sprite.Group()
-tiles_group = pygame.sprite.Group()
-player_group = pygame.sprite.Group()
-oil_busts_group = pygame.sprite.Group()
-pillar_group = pygame.sprite.Group()
+running = True
+
+#all_sprites = pygame.sprite.Group()
+#player_group = pygame.sprite.Group()
+#oil_busts_group = pygame.sprite.Group()
+#pillar_group = pygame.sprite.Group()
+
+levels_data = [
+    {"player_properties":{"x": 300, "y": 400, "pillars": 3, "length": 1500, "time_limit":30},
+     "pillars":[{"x":100, "y":100}, {"x":600, "y":600}]},
+    {"player_properties":{"x": 300, "y": 400, "pillars": 2, "length": 1000, "time_limit":40},
+     "pillars":[{"x":100, "y":100}, {"x":100, "y":600}, {"x":300, "y":100}, {"x":300, "y":600}]}
+]
+
+
+
 
 
 def load_image(name, color_key=-1):
@@ -129,10 +139,6 @@ background_image = pygame.transform.scale(load_image('lawn.png'), (WIDTH, HEIGHT
 tile_width = tile_height = 50
 
 
-class Level():
-    def __init__(self):
-        pass
-
 def draw_statusbar(remaining_time, remaining_length):
     f = pygame.font.Font(None, 30)
     t_text = f.render(f"Осталось секунд: {remaining_time:.2f}", True, (255, 255, 255))
@@ -140,9 +146,10 @@ def draw_statusbar(remaining_time, remaining_length):
     screen.blit(t_text, (10, 10))
     screen.blit(l_text, (400, 10))
 
+
 class Pillar(pygame.sprite.Sprite):
-    def __init__(self, pos_x, pos_y, fixed):
-        super().__init__(pillar_group, all_sprites)
+    def __init__(self, pillars_group, pos_x, pos_y, fixed):
+        super().__init__(pillars_group)
         self.fixed = fixed
         self.image = pillar_image_fixed if fixed else pillar_image
         self.rect = self.image.get_rect()
@@ -197,8 +204,8 @@ class Lights:
 
 
 class Player(pygame.sprite.Sprite):
-    def __init__(self, pos_x, pos_y, additionals, length, time):
-        super().__init__(player_group, all_sprites)
+    def __init__(self, player_group, pos_x, pos_y, additionals, length, time):
+        super().__init__(player_group)
         self.image = player_image_front_st
         self.rect = self.image.get_rect()
         self.rect.x = pos_x
@@ -246,9 +253,9 @@ class Player(pygame.sprite.Sprite):
                             self.additional_pillars += 1
                             picked = True
                             self.pillar_op_time = pygame.time.get_ticks()
-                    if (not picked) and (self.additional_pillars > 0):
+                    if not picked and self.additional_pillars > 0:
                         self.additional_pillars -= 1
-                        newp = Pillar(player.rect.x, player.rect.y, False)
+                        newp = Pillar(pillars, self.rect.x, self.rect.y, False)
                         self.pillar_op_time = pygame.time.get_ticks()
             if keys[pygame.K_q]:
                 if (pygame.time.get_ticks() - self.pillar_op_time) > PILLAR_OP_COOLDOWN:
@@ -278,7 +285,7 @@ class Player(pygame.sprite.Sprite):
                                     self.carry_lights = None
                                     self.pillar_op_time = pygame.time.get_ticks()
                                     print("attached!", len(p.connected))
-                                    break
+
 
             if keys[pygame.K_z]:
                 if (pygame.time.get_ticks() - self.pillar_op_time) > PILLAR_OP_COOLDOWN:
@@ -314,6 +321,8 @@ class Player(pygame.sprite.Sprite):
             self.autopilot = True
             self.destination = event.pos
 
+        return 0
+
     def update(self):
         if self.singlestep:
             self.singlestep = False
@@ -325,7 +334,7 @@ class Player(pygame.sprite.Sprite):
             if self.carry_lights and self.lights_length < self.carry_lights.get_length():
                 self.rect.x -= dx[self.direction] * self.speed
                 self.rect.y -= dy[self.direction] * self.speed
-            player.image = animation[self.direction][self.phase]
+            self.image = animation[self.direction][self.phase]
             self.phase1 += 1
             if self.phase1 >= ANIM_LAG:
                 self.phase1 = 0
@@ -362,7 +371,7 @@ class Player(pygame.sprite.Sprite):
                 self.rect.x = self.destination[0] - 100
                 self.rect.y = self.destination[1] - 100
 
-            player.image = animation[self.direction][self.phase]
+            self.image = animation[self.direction][self.phase]
             self.phase1 += 1
             if self.phase1 >= ANIM_LAG:
                 self.phase1 = 0
@@ -375,43 +384,173 @@ class Player(pygame.sprite.Sprite):
             self.carry_lights.end_y = self.rect.center[1]
 
 
-running = True
-pause = False
-start_screen()
-player = Player(300, 300, 3, 2000, 60)
-pillar0 = Pillar(600, 600, True)
-pillar1 = Pillar(100, 100, True)
-lights_group = []
-time_elapsed = 0
+class Level():
+    def __init__(self, player_properties, pillars):
+        self.player_group = pygame.sprite.Group()
+        self.pillars_group = pygame.sprite.Group()
+        self.player = Player(self.player_group, player_properties["x"], player_properties["y"],
+                             player_properties["pillars"], player_properties["length"],
+                             player_properties["time_limit"])
+        for p in pillars:
+            Pillar(self.pillars_group, p["x"], p["y"], True)
+        self.lights_group = []
+        self.time_elapsed = 0
+
+    def completion_check(self):
+        for p in self.pillars_group:
+            if len(p.connected) == 1:
+                return False
+        return True
+
+    def calc_score(self):
+        return self.player.time_limit * 100 + self.player.lights_length
+
+    def run(self):
+        pause = False
+        time_elapsed = 0
+        global running
+        while running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+                    return 0
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_p:
+                        pause = not pause
+                if not pause:
+                    self.player.input(event, self.pillars_group, self.lights_group)
+                    if self.completion_check():
+                        return self.calc_score()
+            self.player.update()
+            for p in self.pillars_group:
+                p.update(self.player)
+            if not pause:
+                self.player.time_limit -= time_elapsed
+                if self.player.time_limit < 0:
+                    return 0
+
+            screen.fill(pygame.Color(0, 0, 0))
+            screen.blit(background_image, (0, 0))
+            self.pillars_group.draw(screen)
+            for light in self.lights_group:
+                light.draw()
+            self.player_group.draw(screen)
+            if pause:
+                screen.blit(pause_screen, (0, 0))
+            if self.player.carry_lights:
+                draw_statusbar(self.player.time_limit, self.player.lights_length - self.player.carry_lights.get_length())
+            else:
+                draw_statusbar(self.player.time_limit, self.player.lights_length)
+            pygame.display.flip()
+            time_elapsed = clock.tick(FPS) / 1000
+
+
+def levelpassed_screen(result):
+    intro_text = ["Поздравляем!!!", "",
+                  "Наша девочка, смогла украсить свой участок!",
+                  "ВСЕ МЕРЦАЕТ, как наша девочка и хотела.",
+                  f"Вы прошли уровень, набрав следующие очки: {result}", "",
+                  "Для перехода на следующий уровень, нажмите клавишу N"]
+    image = pygame.transform.scale(load_image('level passed!.png'), (WIDTH, HEIGHT))
+    image.set_alpha(160)
+    screen.blit(image, (0, 0))
+    font = pygame.font.Font(None, 30)
+    text_coord = 70
+    for line in intro_text:
+        string_rendered = font.render(line, 1, pygame.Color('yellow'))
+        intro_rect = string_rendered.get_rect()
+        text_coord += 10
+        intro_rect.top = text_coord
+        intro_rect.x = 10
+        text_coord += intro_rect.height
+        screen.blit(string_rendered, intro_rect)
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                terminate()
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_n:
+                    #print("NEXT LEVEL!")
+                    return
+        pygame.display.flip()
+        clock.tick(FPS)
+
+
+def lose_screen():
+    intro_text = ["Lights", "",
+                  "Девочка, помешанная на гирлядах, решила захватить мир!!",
+                  "ВСЕ БУДЕТ МЕРЦАТЬ. Ну, в теории...",
+                  "А для начала, помоги ей украсить свой участок"]
+    starts_image = pygame.transform.scale(load_image('lawn.png'), (WIDTH, HEIGHT))
+    screen.blit(starts_image, (0, 0))
+    font = pygame.font.Font(None, 30)
+    text_coord = 50
+    for line in intro_text:
+        string_rendered = font.render(line, 1, pygame.Color('yellow'))
+        intro_rect = string_rendered.get_rect()
+        text_coord += 10
+        intro_rect.top = text_coord
+        intro_rect.x = 10
+        text_coord += intro_rect.height
+        screen.blit(string_rendered, intro_rect)
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                terminate()
+            elif event.type == pygame.KEYDOWN or event.type == pygame.MOUSEBUTTONDOWN:
+                return
+        pygame.display.flip()
+        clock.tick(FPS)
+
+def win_screen(result):
+    intro_text = ["ДА НУ НЕТ!!", "ЧТО ВЫ НАДЕЛАЛИ!!!",
+                  "ВСЕ ГОРИТ ОСЛЕПИТЕЛЬНЫМ СВЕТОМ (кроме самих гирлянд, хаха)", "", "", "",
+                  "Керри так вам благодарна!",
+                  "А вот все остальные нет",
+                  "Однако, это совсем не важно",
+                  "Поздравляем с победой!!!!!!",
+                  f"Вы набрали {result} очков и эпично ушли в закат"]
+    starts_image = pygame.transform.scale(load_image('level passed!.png'), (WIDTH, HEIGHT))
+    screen.blit(starts_image, (0, 0))
+    font = pygame.font.Font(None, 30)
+    text_coord = 50
+    for line in intro_text:
+        string_rendered = font.render(line, 1, pygame.Color('yellow'))
+        intro_rect = string_rendered.get_rect()
+        text_coord += 10
+        intro_rect.top = text_coord
+        intro_rect.x = 10
+        text_coord += intro_rect.height
+        screen.blit(string_rendered, intro_rect)
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                terminate()
+            elif event.type == pygame.KEYDOWN or event.type == pygame.MOUSEBUTTONDOWN:
+                return
+        pygame.display.flip()
+        clock.tick(FPS)
+
 
 while running:
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-        if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_p:
-                pause = not pause
-        if not pause:
-            player.input(event, pillar_group, lights_group)
-    player.update()
-    for p in pillar_group:
-        p.update(player)
-    if not pause:
-        player.time_limit -= time_elapsed
+    score = 0
+    start_screen()
+    lost = False
 
-    screen.fill(pygame.Color(0, 0, 0))
-    screen.blit(background_image, (0, 0))
-    pillar_group.draw(screen)
-    for light in lights_group:
-        light.draw()
-    player_group.draw(screen)
-    if pause:
-        screen.blit(pause_screen, (0, 0))
-    if player.carry_lights:
-        draw_statusbar(player.time_limit, player.lights_length - player.carry_lights.get_length())
-    else:
-        draw_statusbar(player.time_limit, player.lights_length)
-    pygame.display.flip()
-    time_elapsed = clock.tick(FPS) / 1000
+
+    for leveldata in levels_data:
+        level = Level(leveldata["player_properties"], leveldata["pillars"])
+        result = level.run()
+        if result > 0: # win
+            levelpassed_screen(result)
+            score += result
+            level = None
+        else: # lose
+            lose_screen()
+            lost = True
+            level = None
+            break
+    if not lost:
+        win_screen(score)
 
 terminate()
