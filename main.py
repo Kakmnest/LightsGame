@@ -1,8 +1,8 @@
 import os
 import sys
-import random
 import pygame
 import math
+import csv
 
 pygame.init()
 pygame.key.set_repeat(200, 70)
@@ -19,6 +19,8 @@ GLOW_LOW = 150
 GLOW_HIGH = 255
 GLOW_LAG = 60
 
+LIGHTSCOLORS=[pygame.Color("Red"), pygame.Color("Blue"), pygame.Color("Orange"), pygame.Color("Green"), pygame.Color("Yellow")]
+
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pause_screen = pygame.Surface((WIDTH, HEIGHT))
 pause_screen.fill(pygame.Color(0, 0, 0))
@@ -27,20 +29,14 @@ clock = pygame.time.Clock()
 
 running = True
 
-#all_sprites = pygame.sprite.Group()
-#player_group = pygame.sprite.Group()
-#oil_busts_group = pygame.sprite.Group()
-#pillar_group = pygame.sprite.Group()
 
-levels_data = [
-    {"player_properties":{"x": 300, "y": 400, "pillars": 3, "length": 1500, "time_limit":30},
-     "pillars":[{"x":100, "y":100}, {"x":600, "y":600}]},
-    {"player_properties":{"x": 300, "y": 400, "pillars": 2, "length": 1000, "time_limit":40},
-     "pillars":[{"x":100, "y":100}, {"x":100, "y":600}, {"x":300, "y":100}, {"x":300, "y":600}]}
-]
+with open('data/levels data.csv', encoding="utf8") as csvfile:
+    levels_data = list(csv.DictReader(csvfile, delimiter=';', quotechar='"'))
 
-
-
+for level in range(len(levels_data)):
+    levels_data[level]["player_properties"] = dict(item.split(":") for item in
+                                                levels_data[level]["player_properties_s"].split(","))
+    levels_data[level]["pillars"] = list(levels_data[level]["pillars_s"].split(","))
 
 
 def load_image(name, color_key=-1):
@@ -58,28 +54,6 @@ def load_image(name, color_key=-1):
     else:
         image = image.convert_alpha()
     return image
-
-
-def load_level(filename):
-    filename = "data/" + filename
-    with open(filename, 'r') as mapFile:
-        level_map = [line.strip() for line in mapFile]
-    max_width = max(map(len, level_map))
-    return list(map(lambda x: x.ljust(max_width, '.'), level_map))
-
-
-def generate_level(level):
-    new_player, x, y = None, None, None
-    for y in range(len(level)):
-        for x in range(len(level[y])):
-            if level[y][x] == '.':
-                Tile('empty', x, y)
-            elif level[y][x] == '#':
-                Tile('wall', x, y)
-            elif level[y][x] == '@':
-                Tile('empty', x, y)
-                new_player = Player(x, y)
-    return new_player, x, y
 
 
 def terminate():
@@ -133,18 +107,17 @@ animation = {"L": [player_image_left_st, player_image_left_go],
 dx = {"L": -1, "U": 0, "D": 0, "R": 1}
 dy = {"L": 0, "U": -1, "D": 1, "R": 0}
 
-
 background_image = pygame.transform.scale(load_image('lawn.png'), (WIDTH, HEIGHT))
 
-tile_width = tile_height = 50
-
-
-def draw_statusbar(remaining_time, remaining_length):
+def draw_statusbar(remaining_time, remaining_length, remaining_pillars):
     f = pygame.font.Font(None, 30)
     t_text = f.render(f"Осталось секунд: {remaining_time:.2f}", True, (255, 255, 255))
     l_text = f.render(f"Осталось гирлянды: {str(int(remaining_length))}", True, (255, 255, 255))
+    p_text = f.render(f"Осталось столбиков: {str(int(remaining_pillars))}", True, (255, 255, 255))
+
     screen.blit(t_text, (10, 10))
     screen.blit(l_text, (400, 10))
+    screen.blit(p_text, (400, 700))
 
 
 class Pillar(pygame.sprite.Sprite):
@@ -161,6 +134,7 @@ class Pillar(pygame.sprite.Sprite):
         self.nearby = False
         self.connected = [self]
         self.lightsattached = []
+        self.reachable = False
 
     def update(self, player):
         if not self.fixed:
@@ -185,6 +159,15 @@ class Pillar(pygame.sprite.Sprite):
         return (pygame.math.Vector2(self.rect.x, self.rect.y) -
                 pygame.math.Vector2(other.rect.x, other.rect.y)).magnitude()
 
+    def mark(self):
+        self.reachable = True
+        for p in self.connected:
+            if not p.reachable:
+                p.mark()
+
+    def unmark(self):
+        self.reachable = False
+
 
 class Lights:
     def __init__(self, beg_x, beg_y, end_x, end_y, lit=False):
@@ -201,6 +184,18 @@ class Lights:
 
     def draw(self):
         pygame.draw.line(screen, pygame.Color("orange"), (self.beg_x, self.beg_y), (self.end_x, self.end_y), 5)
+        begv = pygame.math.Vector2(self.beg_x, self.beg_y)
+        endv = pygame.math.Vector2(self.end_x, self.end_y)
+        dirv = endv - begv
+        lng = dirv.magnitude()
+        dirv *= 20/lng
+        leftrightv = dirv.rotate(90)
+        for i in range(int(lng/20)):
+            pygame.draw.circle(screen, LIGHTSCOLORS[i % len(LIGHTSCOLORS)], begv + i*dirv + 0.5*leftrightv, 5)
+            leftrightv = -leftrightv
+
+
+
 
 
 class Player(pygame.sprite.Sprite):
@@ -255,7 +250,7 @@ class Player(pygame.sprite.Sprite):
                             self.pillar_op_time = pygame.time.get_ticks()
                     if not picked and self.additional_pillars > 0:
                         self.additional_pillars -= 1
-                        newp = Pillar(pillars, self.rect.x, self.rect.y, False)
+                        newp = Pillar(pillars, self.rect.x + 50, self.rect.y + 50, False)
                         self.pillar_op_time = pygame.time.get_ticks()
             if keys[pygame.K_q]:
                 if (pygame.time.get_ticks() - self.pillar_op_time) > PILLAR_OP_COOLDOWN:
@@ -285,6 +280,7 @@ class Player(pygame.sprite.Sprite):
                                     self.carry_lights = None
                                     self.pillar_op_time = pygame.time.get_ticks()
                                     print("attached!", len(p.connected))
+                                    break
 
 
             if keys[pygame.K_z]:
@@ -388,22 +384,30 @@ class Level():
     def __init__(self, player_properties, pillars):
         self.player_group = pygame.sprite.Group()
         self.pillars_group = pygame.sprite.Group()
-        self.player = Player(self.player_group, player_properties["x"], player_properties["y"],
-                             player_properties["pillars"], player_properties["length"],
-                             player_properties["time_limit"])
+        self.player = Player(self.player_group, int(player_properties["x"]), int(player_properties["y"]),
+                             int(player_properties["pillars"]), int(player_properties["length"]),
+                             int(player_properties["time_limit"]))
         for p in pillars:
-            Pillar(self.pillars_group, p["x"], p["y"], True)
+            x, y = p.split(" ")
+            Pillar(self.pillars_group, int(x), int(y), True)
         self.lights_group = []
         self.time_elapsed = 0
 
     def completion_check(self):
+        connected_all = True
         for p in self.pillars_group:
-            if len(p.connected) == 1:
-                return False
-        return True
+            if p.fixed:
+                p.mark()
+                break
+        for p in self.pillars_group:
+            if p.fixed and not p.reachable:
+                connected_all = False
+        for p in self.pillars_group:
+            p.unmark()
+        return connected_all
 
     def calc_score(self):
-        return self.player.time_limit * 100 + self.player.lights_length
+        return self.player.time_limit * 10 + self.player.lights_length * 3
 
     def run(self):
         pause = False
@@ -438,9 +442,11 @@ class Level():
             if pause:
                 screen.blit(pause_screen, (0, 0))
             if self.player.carry_lights:
-                draw_statusbar(self.player.time_limit, self.player.lights_length - self.player.carry_lights.get_length())
+                draw_statusbar(self.player.time_limit,
+                               self.player.lights_length - self.player.carry_lights.get_length(),
+                               self.player.additional_pillars)
             else:
-                draw_statusbar(self.player.time_limit, self.player.lights_length)
+                draw_statusbar(self.player.time_limit, self.player.lights_length, self.player.additional_pillars)
             pygame.display.flip()
             time_elapsed = clock.tick(FPS) / 1000
 
@@ -449,7 +455,7 @@ def levelpassed_screen(result):
     intro_text = ["Поздравляем!!!", "",
                   "Наша девочка, смогла украсить свой участок!",
                   "ВСЕ МЕРЦАЕТ, как наша девочка и хотела.",
-                  f"Вы прошли уровень, набрав следующие очки: {result}", "",
+                  f"Вы прошли уровень, набрав следующие очки: {int(result)}", "",
                   "Для перехода на следующий уровень, нажмите клавишу N"]
     image = pygame.transform.scale(load_image('level passed!.png'), (WIDTH, HEIGHT))
     image.set_alpha(160)
@@ -470,7 +476,6 @@ def levelpassed_screen(result):
                 terminate()
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_n:
-                    #print("NEXT LEVEL!")
                     return
         pygame.display.flip()
         clock.tick(FPS)
@@ -509,7 +514,7 @@ def win_screen(result):
                   "А вот все остальные нет",
                   "Однако, это совсем не важно",
                   "Поздравляем с победой!!!!!!",
-                  f"Вы набрали {result} очков и эпично ушли в закат"]
+                  f"Вы набрали {int(result)} очков и эпично ушли в закат"]
     starts_image = pygame.transform.scale(load_image('level passed!.png'), (WIDTH, HEIGHT))
     screen.blit(starts_image, (0, 0))
     font = pygame.font.Font(None, 30)

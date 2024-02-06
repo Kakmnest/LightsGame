@@ -1,0 +1,5 @@
+level;player_properties_s;pillars_s
+1;x:300,y:400,pillars:3,length:1000,time_limit:15;100 100,600 600
+2;x:300,y:400,pillars:2,length:1000,time_limit:50;100 100,100 600,300 100,300 600
+3;x:300,y:400,pillars:4,length:1500,time_limit:60;100 100,100 600,300 400,350 600
+4;x:300,y:400,pillars:6,length:2000,time_limit:60;100 100,200 600,300 400,400 600,600 200
