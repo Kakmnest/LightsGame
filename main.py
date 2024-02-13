@@ -18,27 +18,30 @@ ANIM_PHASES = 2
 GLOW_LOW = 150
 GLOW_HIGH = 255
 GLOW_LAG = 60
+LIGHTS_COLORS = [pygame.Color("Red"), pygame.Color("Blue"), pygame.Color("Orange"),
+                 pygame.Color("Green"), pygame.Color("Yellow")]
+END_LEVEL_ANIMATION_TIME = 3
 
-LIGHTSCOLORS=[pygame.Color("Red"), pygame.Color("Blue"), pygame.Color("Orange"), pygame.Color("Green"), pygame.Color("Yellow")]
+# глобальный признак работы игры
+running = True
 
+# параметры экрана
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pause_screen = pygame.Surface((WIDTH, HEIGHT))
 pause_screen.fill(pygame.Color(0, 0, 0))
 pause_screen.set_alpha(80)
 clock = pygame.time.Clock()
 
-running = True
-
-
+# загрузка уровней из файла .csv
 with open('data/levels data.csv', encoding="utf8") as csvfile:
     levels_data = list(csv.DictReader(csvfile, delimiter=';', quotechar='"'))
-
 for level in range(len(levels_data)):
     levels_data[level]["player_properties"] = dict(item.split(":") for item in
                                                 levels_data[level]["player_properties_s"].split(","))
     levels_data[level]["pillars"] = list(levels_data[level]["pillars_s"].split(","))
 
 
+# функция загрузки изображений из папки data
 def load_image(name, color_key=-1):
     fullname = os.path.join('data', name)
     try:
@@ -56,11 +59,13 @@ def load_image(name, color_key=-1):
     return image
 
 
+# функция выхода из игры
 def terminate():
     pygame.quit()
     sys.exit()
 
 
+# отрисовка начального экрана
 def start_screen():
     intro_text = ["Lights", "",
                   "Девочка, помешанная на гирлядах, решила захватить мир!!",
@@ -87,7 +92,7 @@ def start_screen():
         pygame.display.flip()
         clock.tick(FPS)
 
-
+# загрузка всех изображений с помощью load_image()
 pillar_image = load_image("pillar.png")
 pillar_image_pickable = load_image("pillar.png")
 pillar_image_fixed = load_image("additional_pillar.png")
@@ -99,16 +104,21 @@ player_image_left_st = load_image('девочка налево стоя.png')
 player_image_left_go = load_image('девочка налево идет.png')
 player_image_right_st = load_image('девочка направо стоя.png')
 player_image_right_go = load_image('девочка направо идет.png')
+wingirl_image = load_image('wingirl.png', 0)
+
+# настройка анимации игрока
 animation = {"L": [player_image_left_st, player_image_left_go],
              "R": [player_image_right_st, player_image_right_go],
              "U": [player_image_back_left, player_image_back_right],
              "D": [player_image_front_st, player_image_front_go]}
 
+# изменения координат при движении в направлениях влево-вверх-вниз-вправо
 dx = {"L": -1, "U": 0, "D": 0, "R": 1}
 dy = {"L": 0, "U": -1, "D": 1, "R": 0}
 
 background_image = pygame.transform.scale(load_image('lawn.png'), (WIDTH, HEIGHT))
 
+# функция отрисовки статус-бара
 def draw_statusbar(remaining_time, remaining_length, remaining_pillars):
     f = pygame.font.Font(None, 30)
     t_text = f.render(f"Осталось секунд: {remaining_time:.2f}", True, (255, 255, 255))
@@ -120,10 +130,11 @@ def draw_statusbar(remaining_time, remaining_length, remaining_pillars):
     screen.blit(p_text, (400, 700))
 
 
+# класс столбиков
 class Pillar(pygame.sprite.Sprite):
     def __init__(self, pillars_group, pos_x, pos_y, fixed):
         super().__init__(pillars_group)
-        self.fixed = fixed
+        self.fixed = fixed  # fixed - красные стационарные, not fixed - желтые подвижные
         self.image = pillar_image_fixed if fixed else pillar_image
         self.rect = self.image.get_rect()
         self.rect.x = pos_x
@@ -136,6 +147,7 @@ class Pillar(pygame.sprite.Sprite):
         self.lightsattached = []
         self.reachable = False
 
+    # метод для проверки близости, отрисовки мигания близких желтых столбиков
     def update(self, player):
         if not self.fixed:
             if self.hitbox.colliderect(player.hitbox) :
@@ -155,20 +167,24 @@ class Pillar(pygame.sprite.Sprite):
                 self.nearby = True
             else:
                 self.nearby = False
+
+    # метод проверки расстояния до другого столбика
     def distance_to(self, other):
         return (pygame.math.Vector2(self.rect.x, self.rect.y) -
                 pygame.math.Vector2(other.rect.x, other.rect.y)).magnitude()
 
+    # метод разметки достижимости для проверки соединения столбиков (DFS из интернета)
     def mark(self):
         self.reachable = True
         for p in self.connected:
             if not p.reachable:
                 p.mark()
 
+    # метод снятия пометки достижимости
     def unmark(self):
         self.reachable = False
 
-
+# класс гирлянды (точнее, ее отрезков)
 class Lights:
     def __init__(self, beg_x, beg_y, end_x, end_y, lit=False):
         self.beg_x = beg_x
@@ -179,11 +195,17 @@ class Lights:
         self.beg = None
         self.end = None
 
+    # получение длины
     def get_length(self):
         return (pygame.math.Vector2(self.beg_x, self.beg_y) - pygame.math.Vector2(self.end_x, self.end_y)).magnitude()
 
-    def draw(self):
-        pygame.draw.line(screen, pygame.Color("orange"), (self.beg_x, self.beg_y), (self.end_x, self.end_y), 5)
+    # отрисовка гирлянды - оранжевой линии с разноцветынми огоньками по сторонам
+    def draw(self, ending):
+        if ending:
+            cord_color = pygame.Color("orange")
+        else:
+            cord_color = pygame.Color("darkgrey")
+        pygame.draw.line(screen, cord_color, (self.beg_x, self.beg_y), (self.end_x, self.end_y), 5)
         begv = pygame.math.Vector2(self.beg_x, self.beg_y)
         endv = pygame.math.Vector2(self.end_x, self.end_y)
         dirv = endv - begv
@@ -191,13 +213,16 @@ class Lights:
         dirv *= 20/lng
         leftrightv = dirv.rotate(90)
         for i in range(int(lng/20)):
-            pygame.draw.circle(screen, LIGHTSCOLORS[i % len(LIGHTSCOLORS)], begv + i*dirv + 0.5*leftrightv, 5)
+            pygame.draw.circle(screen, LIGHTS_COLORS[i % len(LIGHTS_COLORS)], begv + i*dirv + 0.5*leftrightv, 5)
+            if ending:
+                t = pygame.time.get_ticks()
+                if math.sin(t/100) > 0:
+                    pygame.draw.circle(screen, LIGHTS_COLORS[i % len(LIGHTS_COLORS)], begv + i*dirv + 0.5*leftrightv, 8)
+
             leftrightv = -leftrightv
 
 
-
-
-
+# класс игрока
 class Player(pygame.sprite.Sprite):
     def __init__(self, player_group, pos_x, pos_y, additionals, length, time):
         super().__init__(player_group)
@@ -218,8 +243,14 @@ class Player(pygame.sprite.Sprite):
         self.singlestep = False
         self.destination = pygame.math.Vector2(pos_x, pos_y)
         self.pillar_op_time = 0
-        self.carry_lights = None
+        self.carry_lights = None  # константа, говорящая о том, есть ли гирлянда в руках
 
+    # обработка клавиш и событий (частичное замещение игрового цикла)
+    # asdw - стрелки
+    # пробел - взять или поставить желтый стоблик
+    # q - прицепить гирлянду
+    # z - отцепить гирлянду
+    # клик мышкой - автопилот в сторону клика
     def input(self, event, pillars, lights):
         keys = pygame.key.get_pressed()
         if keys:
@@ -267,7 +298,6 @@ class Player(pygame.sprite.Sprite):
                     else:
                         for p in pillars:
                             if p.nearby and p.distance_to(self.carry_lights.beg) < self.lights_length:
-                                #print("try to attach")
                                 if self.carry_lights.beg not in p.connected:
                                     self.carry_lights.end_x = p.rect.center[0]
                                     self.carry_lights.end_y = p.rect.center[1]
@@ -276,13 +306,9 @@ class Player(pygame.sprite.Sprite):
                                     p.lightsattached.append(self.carry_lights )
                                     self.carry_lights.end = p
                                     self.lights_length -= self.carry_lights.get_length()
-                                    print(self.lights_length)
                                     self.carry_lights = None
                                     self.pillar_op_time = pygame.time.get_ticks()
-                                    print("attached!", len(p.connected))
                                     break
-
-
             if keys[pygame.K_z]:
                 if (pygame.time.get_ticks() - self.pillar_op_time) > PILLAR_OP_COOLDOWN:
                     if not self.carry_lights:
@@ -311,14 +337,16 @@ class Player(pygame.sprite.Sprite):
                             p.lightsattached.remove(self.carry_lights)
                             self.carry_lights = None
                             self.pillar_op_time = pygame.time.get_ticks()
-
-
         if event.type == pygame.MOUSEBUTTONDOWN:
             self.autopilot = True
             self.destination = event.pos
-
         return 0
 
+    # обновление статусов игрока
+    # при единичном перемещении клавиатурой - смещение на dx, dy по направлению
+    # при автопилоте - смещение в сторону последнего пункта назначения
+    # шаг анимации при движении, с пропуском AMIN_LAG шагов до следующей фазы анимации
+    # если тянем гирлянду - обновление конца гирлянды
     def update(self):
         if self.singlestep:
             self.singlestep = False
@@ -366,7 +394,6 @@ class Player(pygame.sprite.Sprite):
                 self.autopilot = False
                 self.rect.x = self.destination[0] - 100
                 self.rect.y = self.destination[1] - 100
-
             self.image = animation[self.direction][self.phase]
             self.phase1 += 1
             if self.phase1 >= ANIM_LAG:
@@ -380,6 +407,7 @@ class Player(pygame.sprite.Sprite):
             self.carry_lights.end_y = self.rect.center[1]
 
 
+# класс уровня
 class Level():
     def __init__(self, player_properties, pillars):
         self.player_group = pygame.sprite.Group()
@@ -393,6 +421,7 @@ class Level():
         self.lights_group = []
         self.time_elapsed = 0
 
+    # проверка завершения - все красные столбики связаны в одну сеть
     def completion_check(self):
         connected_all = True
         for p in self.pillars_group:
@@ -406,11 +435,20 @@ class Level():
             p.unmark()
         return connected_all
 
+    # подсчет очков за уровень
     def calc_score(self):
         return self.player.time_limit * 10 + self.player.lights_length * 3
 
+    # основной игровой цикл одного уровня
+    # опрашиваем клавишу p для паузы
+    # опрашиваем ввод для игрока player.input()
+    # делаем update для игрока, столбиков
+    # продвигаем и проверяем время
+    # все отрисовываем
+
     def run(self):
         pause = False
+        end_level = False
         time_elapsed = 0
         global running
         while running:
@@ -421,40 +459,46 @@ class Level():
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_p:
                         pause = not pause
-                if not pause:
+                if not pause and not end_level:
                     self.player.input(event, self.pillars_group, self.lights_group)
                     if self.completion_check():
-                        return self.calc_score()
+                        end_level = True
+                        end_level_time = self.player.time_limit
+            if end_level:
+                if self.player.time_limit < end_level_time - END_LEVEL_ANIMATION_TIME:
+                    return self.calc_score()
             self.player.update()
             for p in self.pillars_group:
                 p.update(self.player)
             if not pause:
                 self.player.time_limit -= time_elapsed
-                if self.player.time_limit < 0:
+                if self.player.time_limit < 0 and not end_level:
                     return 0
 
             screen.fill(pygame.Color(0, 0, 0))
             screen.blit(background_image, (0, 0))
             self.pillars_group.draw(screen)
             for light in self.lights_group:
-                light.draw()
+                light.draw(end_level)
             self.player_group.draw(screen)
             if pause:
                 screen.blit(pause_screen, (0, 0))
-            if self.player.carry_lights:
-                draw_statusbar(self.player.time_limit,
-                               self.player.lights_length - self.player.carry_lights.get_length(),
-                               self.player.additional_pillars)
-            else:
-                draw_statusbar(self.player.time_limit, self.player.lights_length, self.player.additional_pillars)
+            if not end_level:
+                if self.player.carry_lights:
+                    draw_statusbar(self.player.time_limit,
+                                   self.player.lights_length - self.player.carry_lights.get_length(),
+                                   self.player.additional_pillars)
+                else:
+                    draw_statusbar(self.player.time_limit, self.player.lights_length, self.player.additional_pillars)
             pygame.display.flip()
             time_elapsed = clock.tick(FPS) / 1000
 
 
+# экран прохождения уровня
 def levelpassed_screen(result):
     intro_text = ["Поздравляем!!!", "",
                   "Наша девочка, смогла украсить свой участок!",
-                  "ВСЕ МЕРЦАЕТ, как наша девочка и хотела.",
+                  "УЧАСТОК МЕРЦАЕТ, мы становимся ближе к нашей цели.",
                   f"Вы прошли уровень, набрав следующие очки: {int(result)}", "",
                   "Для перехода на следующий уровень, нажмите клавишу N"]
     image = pygame.transform.scale(load_image('level passed!.png'), (WIDTH, HEIGHT))
@@ -481,12 +525,13 @@ def levelpassed_screen(result):
         clock.tick(FPS)
 
 
+# экран проигрыша
 def lose_screen():
-    intro_text = ["Lights", "",
-                  "Девочка, помешанная на гирлядах, решила захватить мир!!",
-                  "ВСЕ БУДЕТ МЕРЦАТЬ. Ну, в теории...",
-                  "А для начала, помоги ей украсить свой участок"]
-    starts_image = pygame.transform.scale(load_image('lawn.png'), (WIDTH, HEIGHT))
+    intro_text = ["Lights", "", "", "", "", "", "", "", "", "", "", "", "",
+                  "", "", "", "", "", "", "", "", "",
+                  "Ну вы и лох... Игра же совсем сырая, проиграть тупо невозможно",
+                  "Чтобы начать заново, нажмите клавишу R"]
+    starts_image = pygame.transform.scale(load_image('lose screen.png'), (WIDTH, HEIGHT))
     screen.blit(starts_image, (0, 0))
     font = pygame.font.Font(None, 30)
     text_coord = 50
@@ -502,29 +547,29 @@ def lose_screen():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 terminate()
-            elif event.type == pygame.KEYDOWN or event.type == pygame.MOUSEBUTTONDOWN:
-                return
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_r:
+                    return
         pygame.display.flip()
         clock.tick(FPS)
 
+
+# экран победы в игре
 def win_screen(result):
-    intro_text = ["ДА НУ НЕТ!!", "ЧТО ВЫ НАДЕЛАЛИ!!!",
-                  "ВСЕ ГОРИТ ОСЛЕПИТЕЛЬНЫМ СВЕТОМ (кроме самих гирлянд, хаха)", "", "", "",
-                  "Керри так вам благодарна!",
-                  "А вот все остальные нет",
-                  "Однако, это совсем не важно",
-                  "Поздравляем с победой!!!!!!",
-                  f"Вы набрали {int(result)} очков и эпично ушли в закат"]
+    score_text = ["ПОЗДРАВЛЯЕМ!!",
+                  f"Вы набрали {int(result)} очков!"]
     starts_image = pygame.transform.scale(load_image('level passed!.png'), (WIDTH, HEIGHT))
     screen.blit(starts_image, (0, 0))
-    font = pygame.font.Font(None, 30)
-    text_coord = 50
-    for line in intro_text:
+    wingirl_image_scaled = pygame.transform.scale(wingirl_image, (700, 800))
+    screen.blit(wingirl_image_scaled, (50, 0))
+    font = pygame.font.Font(None, 70)
+    text_coord = 650
+    for line in score_text:
         string_rendered = font.render(line, 1, pygame.Color('yellow'))
         intro_rect = string_rendered.get_rect()
         text_coord += 10
         intro_rect.top = text_coord
-        intro_rect.x = 10
+        intro_rect.x = 100
         text_coord += intro_rect.height
         screen.blit(string_rendered, intro_rect)
     while True:
@@ -537,25 +582,29 @@ def win_screen(result):
         clock.tick(FPS)
 
 
+# верхний игровой цикл по уровням
 while running:
     score = 0
     start_screen()
     lost = False
-
-
     for leveldata in levels_data:
         level = Level(leveldata["player_properties"], leveldata["pillars"])
         result = level.run()
-        if result > 0: # win
-            levelpassed_screen(result)
+        if not running:
+            lost = True
+            break
+        if result > 0:
+            if not leveldata == levels_data[-1]:
+                levelpassed_screen(result)
             score += result
             level = None
-        else: # lose
+        else:
             lose_screen()
             lost = True
             level = None
             break
     if not lost:
         win_screen(score)
+        running = False
 
 terminate()
