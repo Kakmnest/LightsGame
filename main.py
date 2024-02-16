@@ -210,16 +210,16 @@ class Lights:
         endv = pygame.math.Vector2(self.end_x, self.end_y)
         dirv = endv - begv
         lng = dirv.magnitude()
-        dirv *= 20/lng
-        leftrightv = dirv.rotate(90)
-        for i in range(int(lng/20)):
-            pygame.draw.circle(screen, LIGHTS_COLORS[i % len(LIGHTS_COLORS)], begv + i*dirv + 0.5*leftrightv, 5)
-            if ending:
-                t = pygame.time.get_ticks()
-                if math.sin(t/100) > 0:
-                    pygame.draw.circle(screen, LIGHTS_COLORS[i % len(LIGHTS_COLORS)], begv + i*dirv + 0.5*leftrightv, 8)
-
-            leftrightv = -leftrightv
+        if lng>0:
+            dirv *= 20/lng
+            leftrightv = dirv.rotate(90)
+            for i in range(int(lng/20)):
+                pygame.draw.circle(screen, LIGHTS_COLORS[i % len(LIGHTS_COLORS)], begv + i*dirv + 0.5*leftrightv, 5)
+                if ending:
+                    t = pygame.time.get_ticks()
+                    if math.sin(t/100) > 0:
+                        pygame.draw.circle(screen, LIGHTS_COLORS[i % len(LIGHTS_COLORS)], begv + i*dirv + 0.5*leftrightv, 8)
+                leftrightv = -leftrightv
 
 
 # класс игрока

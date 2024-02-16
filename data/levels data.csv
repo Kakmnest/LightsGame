@@ -1,5 +1,6 @@
 level;player_properties_s;pillars_s
-1;x:300,y:400,pillars:3,length:1000,time_limit:15;100 100,600 600
-2;x:300,y:400,pillars:2,length:1000,time_limit:50;100 100,100 600,300 100,300 600
-3;x:300,y:400,pillars:4,length:1500,time_limit:60;100 100,100 600,300 400,350 600
-4;x:300,y:400,pillars:6,length:2000,time_limit:60;100 100,200 600,300 400,400 600,600 200
+1;x:300,y:400,pillars:1,length:1500,time_limit:20;375 50,25 700,725 700
+2;x:300,y:400,pillars:2,length:2000,time_limit:30;25 50,725 50,25 700,725 700
+3;x:300,y:400,pillars:3,length:2500,time_limit:40;25 50,375 50,725 50,175 700,575 700
+4;x:300,y:400,pillars:2,length:3000,time_limit:50;25 400,175 50,575 50,725 400,175 700,575 700
+5;x:300,y:400,pillars:0,length:2300,time_limit:50;100 100,300 100,500 100,700 50,550 400,300 350,100 350,50 600,100 700,250 650,400 700,600 650
