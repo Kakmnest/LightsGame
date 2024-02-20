@@ -118,6 +118,7 @@ dy = {"L": 0, "U": -1, "D": 1, "R": 0}
 
 background_image = pygame.transform.scale(load_image('lawn.png'), (WIDTH, HEIGHT))
 
+
 # функция отрисовки статус-бара
 def draw_statusbar(remaining_time, remaining_length, remaining_pillars):
     f = pygame.font.Font(None, 30)
@@ -183,6 +184,7 @@ class Pillar(pygame.sprite.Sprite):
     # метод снятия пометки достижимости
     def unmark(self):
         self.reachable = False
+
 
 # класс гирлянды (точнее, ее отрезков)
 class Lights:
@@ -467,7 +469,8 @@ class Level():
             if end_level:
                 if self.player.time_limit < end_level_time - END_LEVEL_ANIMATION_TIME:
                     return self.calc_score()
-            self.player.update()
+            if not pause:
+                self.player.update()
             for p in self.pillars_group:
                 p.update(self.player)
             if not pause:
